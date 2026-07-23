@@ -1,0 +1,59 @@
+العنوان: كود الشبكة العصبية المتكررة (RNN) للتنبؤ بسلسلة زمنية
+
+ملاحظة: هذا الكود لأغراض تعليمية فقط وليس مخصصًا للتنبؤ الفعلي بسوق الأسهم.
+
+الشرح بالعربي:
+هذا الكود يبني نموذج شبكة عصبية متكررة بسيطة (SimpleRNN) للتنبؤ بالقيمة التالية في سلسلة زمنية رقمية.
+
+خطوات الكود:
+- تعريف سلسلة زمنية بسيطة من الأرقام، ثم تطبيعها (Normalization) لتكون بين 0 و1 باستخدام min-max scaling.
+- تقسيم البيانات إلى جزء تدريب (أول 10 قيم) وجزء تحقق.
+- تجهيز بيانات التدريب بأسلوب النافذة المنزلقة (Sliding Window): استخدام 4 قيم متتالية (step=4) للتنبؤ بالقيمة الخامسة.
+- إعادة تشكيل بيانات الإدخال إلى الصيغة التي تتطلبها طبقة RNN: (عدد العينات، خطوات زمنية، عدد الخصائص).
+- بناء نموذج Sequential يحتوي على طبقة SimpleRNN بـ 5 وحدات ودالة تفعيل sigmoid، تليها طبقة Dense بوحدة واحدة للمخرج النهائي.
+- تجميع النموذج باستخدام optimizer adam ودالة خسارة mean_squared_error، وتدريبه لمدة 1000 حقبة.
+- رسم منحنى الخسارة (Training Loss) عبر الحقب.
+- التنبؤ على بيانات التدريب وبيانات التحقق (Validation) بنفس أسلوب النافذة المنزلقة.
+- رسم القيم الفعلية مقابل القيم المتوقعة للتدريب والتحقق في رسم بياني واحد لمقارنة أداء النموذج.
+
+هذا مثال بسيط يوضح كيفية استخدام SimpleRNN للتعامل مع البيانات التسلسلية (Sequential Data) والتنبؤ بالقيمة التالية بناءً على القيم السابقة.
+
+الكود الكامل:
+```python
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, SimpleRNN
+
+y = np.array([9, 7, 6, 10, 8, 7, 11, 9, 6, 12, 10, 7, 11, 9, 7])
+yn = (y - np.min(y)) / (np.max(y) - np.min(y))
+train_size = 10
+train = yn[0:train_size]
+
+X_train, y_train = [], []
+step = 4
+for i in range(step, len(train)):
+    X_train.append(yn[i-step:i])
+    y_train.append(yn[i])
+
+X_train = np.reshape(X_train, (len(X_train), step, 1))
+y_train = np.reshape(y_train, (len(y_train), 1, 1))
+
+random.seed(40)
+model = Sequential()
+model.add(SimpleRNN(units=5, input_shape=(step, 1), activation="sigmoid"))
+model.add(Dense(units=1, activation="sigmoid"))
+model.compile(optimizer='adam', loss='mean_squared_error')
+history = model.fit(X_train, y_train, epochs=1000)
+
+y_pred_train = model.predict(X_train).flatten()
+
+valid = yn[train_size-step:len(yn)]
+X_valid, y_valid = [], []
+for i in range(step, len(valid)):
+    X_valid.append(valid[i-step:i])
+    y_valid.append(valid[i])
+X_valid = np.reshape(X_valid, (len(X_valid), step, 1))
+y_pred_valid = model.predict(X_valid).flatten()
+```

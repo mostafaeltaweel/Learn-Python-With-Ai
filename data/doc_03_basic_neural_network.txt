@@ -1,0 +1,40 @@
+العنوان: كود الشبكة العصبية الأساسية (فيديو المقدمة عن الشبكات العصبية)
+
+الشرح بالعربي:
+هذا أبسط مثال ممكن على شبكة عصبية في Keras، ويُستخدم لأغراض تعليمية لشرح فكرة الخلية العصبية الواحدة (Single Neuron / Logistic Regression).
+
+خطوات الكود:
+- تعريف بيانات صغيرة: قيم PSA (مؤشر مصلي) لمجموعتين من المرضى (Group)، إحداها ترمز بالحرف C والأخرى بالحرف H.
+- تحويل التصنيف النصي (C/H) إلى قيم رقمية (1 أو 0) باستخدام np.where.
+- بناء نموذج Sequential يحتوي على طبقة واحدة فقط (Dense) بخلية عصبية واحدة (unit=1) ودالة تفعيل sigmoid، وهو ما يجعله يعادل نموذج انحدار لوجستي (Logistic Regression) بسيط.
+- تجميع النموذج باستخدام Adam كمُحسِّن ودالة خسارة binary_crossentropy المناسبة للتصنيف الثنائي.
+- تدريب النموذج لعدد كبير من الحقب (3000 حقبة) نظرًا لصغر حجم البيانات.
+- عرض الأوزان النهائية للنموذج بعد التدريب (model.get_weights).
+- استخدام النموذج للتنبؤ بقيمة جديدة (x=2).
+
+هذا الكود يُستخدم كمقدمة تعليمية لفهم كيف تعمل خلية عصبية واحدة بأبسط صورة قبل الانتقال إلى شبكات أعمق.
+
+الكود الكامل:
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+import random
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+
+PSA = np.array([3.8, 3.4, 2.9, 2.8, 2.7, 2.1, 1.6, 2.5, 2.0, 1.7, 1.4, 1.2, 0.9, 0.8])
+Group = np.array(['C', 'C', 'C', 'C', 'C', 'C', 'C', 'H', 'H', 'H', 'H', 'H', 'H', 'H'])
+target = np.where(Group == 'C', 1, 0)
+
+random.seed(915)
+model = Sequential()
+model.add(Dense(1, input_dim=1, activation='sigmoid'))
+model.compile(optimizer=Adam(learning_rate=0.01), loss='binary_crossentropy')
+model.fit(PSA, target, epochs=3000, verbose=1)
+
+model.get_weights()
+
+x1 = np.array([2])
+model.predict(x1, verbose=0)
+```

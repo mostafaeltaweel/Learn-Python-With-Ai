@@ -1,0 +1,85 @@
+العنوان: كود التصنيف والتحديد المبسط للكائنات باستخدام VGG16
+
+الشرح بالعربي:
+هذا الكود يبني نموذجًا واحدًا له مخرجان (Multi-output Model) باستخدام شبكة VGG16 المدربة مسبقًا على ImageNet، لأداء مهمتين في نفس الوقت:
+1. تصنيف الصورة (قطة أم كلب) - Classification.
+2. تحديد موقع الكائن في الصورة (Bounding Box Regression).
+
+خطوات الكود:
+- قراءة ملف CSV يحتوي على مسارات الصور وإحداثيات الصندوق المحيط والفئة.
+- قراءة كل صورة، تطبيع إحداثيات الصندوق المحيط بالنسبة لأبعاد الصورة الأصلية، تحويل الفئة إلى رقم (0 قطة، 1 كلب)، ثم إعادة تحجيم الصورة إلى 224x224 وتطبيع قيم البكسل بين 0 و1.
+- تقسيم البيانات إلى تدريب واختبار باستخدام train_test_split.
+- تحميل VGG16 بدون الطبقات الأخيرة (include_top=False)، وتجميد جميع الطبقات ثم إعادة تدريب آخر 4 طبقات فقط (Fine-tuning).
+- بناء رأسين منفصلين فوق مخرجات VGG16:
+  - رأس الصندوق المحيط (bbox): طبقات Flatten وDense تنتهي بـ 4 قيم بدالة sigmoid.
+  - رأس التصنيف (class): طبقة GlobalAveragePooling2D ثم Dense تنتهي بقيمة واحدة بدالة sigmoid.
+- تجميع النموذج بدالتي خسارة مختلفتين: huber لصندوق الإحاطة وbinary_crossentropy للتصنيف.
+- تدريب النموذج على المخرجين معًا لمدة 20 حقبة.
+- تقييم النموذج ثم عرض نتيجة تنبؤ لصورة واحدة مع رسم الصندوق المحيط الحقيقي (أزرق) والمتوقع (أخضر) باستخدام matplotlib.
+
+هذا مثال جيد على بناء نموذج متعدد المهام (Multi-task Learning) باستخدام Transfer Learning.
+
+الكود الكامل:
+```python
+import os
+import cv2
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.layers import GlobalAveragePooling2D, Flatten, Dense, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+
+df = pd.read_csv("c:/AI/Oxford_pet_dataset/labels_with_classes.csv")
+image_dir = "c:/AI/Oxford_pet_dataset/images"
+IMG_SIZE = 224
+images, boxes, labels = [], [], []
+
+for _, row in df.iterrows():
+    img = cv2.imread(os.path.join(image_dir, row['filename']))
+    if img is None:
+        continue
+    h_img, w_img, _ = img.shape
+    x = row['x'] / w_img
+    y = row['y'] / h_img
+    w = row['w'] / w_img
+    h = row['h'] / h_img
+    label = 1 if row['animal'] == 'dog' else 0
+    img = cv2.resize(img, (IMG_SIZE, IMG_SIZE)) / 255.0
+    images.append(img); boxes.append([x, y, w, h]); labels.append(label)
+
+images = np.array(images, dtype=np.float32)
+boxes = np.array(boxes, dtype=np.float32)
+labels = np.array(labels, dtype=np.float32)
+
+X_train, X_test, y_box_train, y_box_test, y_cls_train, y_cls_test = train_test_split(
+    images, boxes, labels, test_size=0.2, random_state=42)
+
+base_model = VGG16(weights='imagenet', include_top=False, input_tensor=Input(shape=(224, 224, 3)))
+for layer in base_model.layers:
+    layer.trainable = False
+for layer in base_model.layers[-4:]:
+    layer.trainable = True
+
+vgg16 = base_model.output
+x1 = Flatten()(vgg16)
+x1 = Dense(512, activation='relu')(x1)
+x1 = Dense(256, activation='relu')(x1)
+x1 = Dense(64, activation='relu')(x1)
+bbox_output = Dense(4, activation='sigmoid', name='bbox')(x1)
+
+x2 = GlobalAveragePooling2D()(vgg16)
+x2 = Dense(32, activation='relu')(x2)
+class_output = Dense(1, activation='sigmoid', name='class')(x2)
+
+model = Model(inputs=base_model.input, outputs=[bbox_output, class_output])
+model.compile(optimizer=Adam(learning_rate=1e-4),
+              loss={'bbox': 'huber', 'class': 'binary_crossentropy'},
+              loss_weights={'bbox': 1, 'class': 1},
+              metrics={'bbox': 'mse', 'class': 'accuracy'})
+
+model.fit(X_train, {'bbox': y_box_train, 'class': y_cls_train}, epochs=20, batch_size=8, validation_split=0.1, shuffle=True)
+model.evaluate(X_test, {'bbox': y_box_test, 'class': y_cls_test})
+```

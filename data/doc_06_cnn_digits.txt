@@ -1,0 +1,56 @@
+العنوان: كود الشبكة العصبية التلافيفية (CNN) للتعرف على أرقام مبسطة
+
+الشرح بالعربي:
+هذا الكود مثال تعليمي مبسط جدًا لشرح فكرة الشبكات العصبية التلافيفية (CNN)، حيث يتم تمثيل كل رقم من 0 إلى 9 كصورة صغيرة جدًا بحجم 5x5 بكسل باستخدام قوائم من الأصفار والواحدات (تمثل بكسلات مضاءة أو مطفأة) بدلاً من استخدام صور حقيقية.
+
+خطوات الكود:
+- تعريف كل رقم (من صفر إلى تسعة) كقائمة من 25 قيمة (0 أو 1) تمثل شكل الرقم على شبكة 5x5.
+- تجميع كل الأرقام في مصفوفة X وإعادة تشكيلها إلى الشكل (10, 5, 5).
+- تعريف مصفوفة الفئات y من 0 إلى 9، وتحويلها إلى الصيغة One-Hot باستخدام to_categorical.
+- بناء نموذج Sequential يحتوي على:
+  - طبقة Conv2D بمرشح واحد (filter=1) وحجم نواة 2x2 بدون Bias مع دالة تفعيل relu.
+  - طبقة MaxPooling2D بحجم 2x2 لتقليل الأبعاد.
+  - طبقة Flatten لتحويل المخرجات إلى متجه واحد.
+  - طبقة Dense نهائية بعشر وحدات (لعشر فئات) ودالة تفعيل softmax.
+- تجميع النموذج باستخدام optimizer adam ودالة خسارة categorical_crossentropy، وتدريبه لمدة 1000 حقبة بحجم دفعة (batch_size) يساوي 1 لأن البيانات صغيرة جدًا (10 عينات فقط).
+- التنبؤ بفئة أول رقم (صفر) في المصفوفة للتأكد من عمل النموذج.
+
+هذا المثال مصمم خصيصًا لتبسيط فكرة كيفية عمل طبقات الالتفاف (Convolution) والتجميع (Pooling) بأصغر حجم بيانات ممكن، دون الحاجة لصور حقيقية أو مكتبات بيانات ضخمة.
+
+الكود الكامل:
+```python
+import numpy as np
+from tensorflow.keras.utils import to_categorical
+import matplotlib.pyplot as plt
+import random
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+zero = [1,1,1,1,0, 1,0,0,1,0, 1,0,0,1,0, 1,0,0,1,0, 1,1,1,1,0]
+one = [0,0,1,0,0, 0,0,1,0,0, 0,0,1,0,0, 0,0,1,0,0, 0,0,1,0,0]
+two = [1,1,1,1,0, 0,0,0,1,0, 1,1,1,1,0, 1,0,0,0,0, 1,1,1,1,0]
+three = [1,1,1,1,0, 0,0,0,1,0, 0,1,1,1,0, 0,0,0,1,0, 1,1,1,1,0]
+four = [1,0,0,1,0, 1,0,0,1,0, 1,1,1,1,0, 0,0,0,1,0, 0,0,0,1,0]
+five = [1,1,1,1,0, 1,0,0,0,0, 1,1,1,1,0, 0,0,0,1,0, 1,1,1,1,0]
+six = [1,1,1,1,0, 1,0,0,0,0, 1,1,1,1,0, 1,0,0,1,0, 1,1,1,1,0]
+seven = [1,1,1,1,0, 0,0,0,1,0, 0,0,1,0,0, 0,1,0,0,0, 0,1,0,0,0]
+eight = [1,1,1,1,0, 1,0,0,1,0, 1,1,1,1,0, 1,0,0,1,0, 1,1,1,1,0]
+nine = [1,1,1,1,0, 1,0,0,1,0, 1,1,1,1,0, 0,0,0,1,0, 0,0,0,1,0]
+
+X = np.array([zero, one, two, three, four, five, six, seven, eight, nine])
+X = X.reshape(10, 5, 5)
+y = np.array([0,1,2,3,4,5,6,7,8,9])
+y = to_categorical(y, 10)
+
+random.seed(1)
+model = Sequential([
+    Conv2D(filters=1, kernel_size=(2, 2), strides=(1, 1), padding='valid',
+           input_shape=(5, 5, 1), use_bias=False, activation='relu'),
+    MaxPooling2D(pool_size=(2, 2)),
+    Flatten(),
+    Dense(10, activation='softmax')
+])
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.fit(X, y, epochs=1000, batch_size=1, verbose=1)
+model.predict(X[[0]])
+```

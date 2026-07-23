@@ -1,0 +1,15 @@
+# البيئة والمفاتيح السرية
+.env
+.venv/
+venv/
+
+# قاعدة بيانات المتجهات (يمكن إعادة بناؤها بتشغيل 05_create_chroma_store.py)
+chroma_db/
+
+# ملفات بايثون المؤقتة
+__pycache__/
+*.pyc
+
+# ملفات النظام
+.DS_Store
+.streamlit/secrets.toml

@@ -1,0 +1,67 @@
+العنوان: كود تدريب نموذج YOLO على بيانات Oxford Pet Dataset
+
+الشرح بالعربي:
+هذا الكود يقوم بتجهيز بيانات Oxford Pet Dataset لتدريب نموذج YOLO للكشف عن الكائنات (Object Detection).
+الخطوات الأساسية في الكود:
+1. قراءة ملف CSV يحتوي على أسماء الصور وإحداثيات الصندوق المحيط (Bounding Box) ونوع الحيوان (قطة أو كلب).
+2. إنشاء مجلدات بصيغة YOLO (train/images, train/labels, val/images, val/labels) وتقسيم البيانات إلى تدريب وتحقق بنسبة 80% إلى 20%.
+3. تحويل إحداثيات الصندوق المحيط من الصيغة (x, y, w, h) بالبكسل إلى الصيغة المطبعة (normalized) التي يحتاجها YOLO، وهي مركز الصندوق (x_center, y_center) والعرض والارتفاع نسبة إلى أبعاد الصورة.
+4. تحديد رقم الفئة (class_id): 0 للقطط و1 للكلاب.
+5. كتابة ملف نصي (.txt) لكل صورة يحتوي على سطر لكل كائن بالصيغة: class_id x_center y_center w h.
+6. إنشاء ملف dataset.yaml يحدد مسار البيانات وأسماء الفئات (cat, dog).
+7. تحميل نموذج YOLO مُدرب مسبقًا (yolo26n.pt) من مكتبة ultralytics، ثم تدريبه على البيانات الجديدة لمدة 20 حقبة (epochs) بحجم صورة 224x224.
+8. بعد التدريب، يقوم الكود بعمل تنبؤ (predict) على صور التحقق وعرض الصورة مع الصندوق المحيط والفئة المتوقعة باستخدام matplotlib.
+
+هذا الكود مثال جيد على استخدام مكتبة Ultralytics YOLO لمهام الكشف عن الكائنات من الصفر بعد تجهيز البيانات بالصيغة المناسبة.
+
+الكود الكامل:
+```python
+import os
+import shutil
+import random
+import pandas as pd
+
+csv_file = "c:/AI/Oxford_pet_dataset/labels_with_classes.csv"
+image_dir = "c:/AI/Oxford_pet_dataset/images"
+dataset_dir = "c:/AI/Oxford_pet_dataset/yolo_dataset"
+
+train_img_dir = os.path.join(dataset_dir, "train/images")
+train_lbl_dir = os.path.join(dataset_dir, "train/labels")
+val_img_dir = os.path.join(dataset_dir, "val/images")
+val_lbl_dir = os.path.join(dataset_dir, "val/labels")
+
+for d in [train_img_dir, train_lbl_dir, val_img_dir, val_lbl_dir]:
+    os.makedirs(d, exist_ok=True)
+
+df = pd.read_csv(csv_file)
+filenames = df['filename'].unique().tolist()
+random.shuffle(filenames)
+
+split_ratio = 0.8
+split_idx = int(len(filenames) * split_ratio)
+train_files = filenames[:split_idx]
+val_files = filenames[split_idx:]
+
+for filename in filenames:
+    rows = df[df['filename'] == filename]
+    if filename in train_files:
+        out_img_dir, out_lbl_dir = train_img_dir, train_lbl_dir
+    else:
+        out_img_dir, out_lbl_dir = val_img_dir, val_lbl_dir
+
+    shutil.copy(os.path.join(image_dir, filename), os.path.join(out_img_dir, filename))
+    label_path = os.path.join(out_lbl_dir, filename.replace(".jpg", ".txt"))
+    with open(label_path, "w") as f:
+        for _, row in rows.iterrows():
+            x_center = (row['x'] + row['w'] / 2) / row['width']
+            y_center = (row['y'] + row['h'] / 2) / row['height']
+            w = row['w'] / row['width']
+            h = row['h'] / row['height']
+            class_id = 1 if row['animal'] == 'dog' else 0
+            f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {w:.6f} {h:.6f}\n")
+
+from ultralytics import YOLO
+model = YOLO("yolo26n.pt")
+model.train(data="C:/AI/Oxford_pet_dataset/yolo_dataset/dataset.yaml", epochs=20, imgsz=224)
+results = model.predict("C:/AI/Oxford_pet_dataset/yolo_dataset/val/images")
+```

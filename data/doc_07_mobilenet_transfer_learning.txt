@@ -1,0 +1,59 @@
+العنوان: كود التعلم بالنقل (Transfer Learning) باستخدام MobileNet لتصنيف القطط والكلاب
+
+الشرح بالعربي:
+هذا الكود يستخدم أسلوب التعلم بالنقل (Transfer Learning) مع نموذج MobileNet المدرب مسبقًا على ImageNet لتصنيف صور القطط والكلاب.
+
+خطوات الكود:
+- تحديد المعاملات الأساسية: أبعاد الصورة (224x224)، حجم الدفعة (batch_size=32)، وعدد الطبقات القابلة لإعادة التدريب (NUM_TRAINABLE_LAYERS)، والتي تكون صفرًا افتراضيًا (بدون Fine-tuning).
+- تحديد مسارات ثلاث مجلدات: بيانات التدريب، بيانات التحقق، وبيانات الاختبار.
+- إنشاء مولدات بيانات (ImageDataGenerator) لكل مجموعة:
+  - لبيانات التدريب: مع تحويلات لزيادة البيانات (Data Augmentation) مثل الدوران والإزاحة والتكبير والانعكاس الأفقي.
+  - لبيانات التحقق والاختبار: بدون تحويلات، فقط دالة المعالجة المسبقة الخاصة بـ MobileNet.
+- تحميل نموذج MobileNet بدون الطبقة العليا (include_top=False)، وتجميد جميع طبقاته أولاً.
+- إن كان عدد الطبقات القابلة للتدريب أكبر من صفر، يتم فك تجميد آخر عدد من الطبقات المحدد لإجراء Fine-tuning.
+- بناء نموذج Sequential يضم: قاعدة MobileNet، ثم GlobalAveragePooling2D، ثم طبقة Dense بـ 64 وحدة بدالة relu، وأخيرًا طبقة إخراج بوحدة واحدة ودالة sigmoid للتصنيف الثنائي.
+- تجميع النموذج بمُحسِّن Adam ودالة خسارة binary_crossentropy.
+- تدريب النموذج لمدة 5 حقب باستخدام مولد بيانات التدريب والتحقق.
+- تقييم النموذج على بيانات الاختبار وطباعة الدقة النهائية (Test Accuracy).
+
+هذا مثال عملي وشائع على كيفية الاستفادة من نموذج مدرب مسبقًا (Pretrained Model) صغير الحجم وسريع مثل MobileNet في مهام تصنيف الصور بأقل بيانات ووقت تدريب ممكن.
+
+الكود الكامل:
+```python
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.applications import MobileNet
+from tensorflow.keras.applications.mobilenet import preprocess_input
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+IMG_WIDTH, IMG_HEIGHT = 224, 224
+BATCH_SIZE = 32
+NUM_TRAINABLE_LAYERS = 0
+
+TRAIN_DATA_DIR = "C:/AI/Cats_and_dogs/training_set"
+VALIDATION_DATA_DIR = "C:/AI/Cats_and_dogs/validation_set"
+TEST_DATA_DIR = "C:/AI/Cats_and_dogs/test_set"
+
+train_datagen = ImageDataGenerator(preprocessing_function=preprocess_input,
+                                    rotation_range=20, width_shift_range=0.2,
+                                    height_shift_range=0.2, zoom_range=0.2,
+                                    horizontal_flip=True)
+val_test_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+
+train_generator = train_datagen.flow_from_directory(TRAIN_DATA_DIR, target_size=(IMG_WIDTH, IMG_HEIGHT), batch_size=BATCH_SIZE, class_mode="binary")
+validation_generator = val_test_datagen.flow_from_directory(VALIDATION_DATA_DIR, target_size=(IMG_WIDTH, IMG_HEIGHT), batch_size=BATCH_SIZE, class_mode="binary")
+test_generator = val_test_datagen.flow_from_directory(TEST_DATA_DIR, target_size=(IMG_WIDTH, IMG_HEIGHT), batch_size=BATCH_SIZE, class_mode="binary", shuffle=False)
+
+base_model = MobileNet(weights='imagenet', include_top=False, input_shape=(IMG_WIDTH, IMG_HEIGHT, 3))
+for layer in base_model.layers:
+    layer.trainable = False
+if NUM_TRAINABLE_LAYERS > 0:
+    for layer in base_model.layers[-NUM_TRAINABLE_LAYERS:]:
+        layer.trainable = True
+
+model = Sequential([base_model, GlobalAveragePooling2D(), Dense(64, activation='relu'), Dense(1, activation='sigmoid')])
+model.compile(optimizer=tf.keras.optimizers.Adam(0.001), loss='binary_crossentropy', metrics=['accuracy'])
+model.fit(train_generator, epochs=5, validation_data=validation_generator)
+loss, accuracy = model.evaluate(test_generator)
+```

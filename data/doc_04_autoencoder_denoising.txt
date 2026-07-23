@@ -1,0 +1,57 @@
+العنوان: كود الـ Autoencoder لإزالة التشويش (Noise) من الصور
+
+الشرح بالعربي:
+هذا الكود يبني نموذج Autoencoder تلافيفي (Convolutional Autoencoder) لإزالة الضوضاء عن صور الأرقام المكتوبة بخط اليد من بيانات MNIST، مع التركيز فقط على صور الرقم "2" كمثال مبسط.
+
+خطوات الكود:
+- تحميل بيانات MNIST، ثم تصفية الصور للاحتفاظ فقط بصور الرقم 2.
+- تطبيع قيم البكسل بين 0 و1، وإعادة تشكيل البيانات لإضافة بُعد القناة (channel).
+- إضافة ضوضاء عشوائية (Gaussian Noise) بمعامل 0.3 إلى الصور الأصلية لإنشاء نسخة "مشوشة" منها، مع التأكد أن القيم تبقى بين 0 و1 باستخدام np.clip.
+- بناء المُشفِّر (Encoder): طبقتان تلافيفيتان (Conv2D) مع MaxPooling2D لتقليل أبعاد الصورة تدريجيًا واستخلاص التمثيل المضغوط (encoded).
+- بناء المُفكِّك (Decoder): طبقتان تلافيفيتان مع UpSampling2D لإعادة بناء الصورة من التمثيل المضغوط، وطبقة أخيرة بدالة sigmoid تُخرج الصورة المُعاد بناؤها بنفس أبعاد الصورة الأصلية.
+- تجميع النموذج الكامل (autoencoder) باستخدام optimizer adam وloss دالة binary_crossentropy.
+- تدريب النموذج بحيث يتعلم تحويل الصورة المشوشة (المدخل) إلى الصورة الأصلية النظيفة (الهدف)، لمدة 50 حقبة.
+- استخدام النموذج المدرب لإزالة الضوضاء عن صور الاختبار، ثم عرض ثلاث صور جنبًا إلى جنب لكل عينة: الصورة الأصلية، الصورة المشوشة، والصورة بعد إزالة التشويش.
+
+هذا مثال كلاسيكي على استخدام الـ Autoencoders في مهام إزالة الضوضاء (Denoising) من الصور.
+
+الكود الكامل:
+```python
+import numpy as np
+from tensorflow.keras import layers, models
+from tensorflow.keras.datasets import mnist
+import matplotlib.pyplot as plt
+
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+x_train_2s = x_train[y_train == 2]
+x_test_2s = x_test[y_test == 2]
+
+x_train_2s = x_train_2s.astype('float32') / 255.
+x_test_2s = x_test_2s.astype('float32') / 255.
+x_train_2s = np.reshape(x_train_2s, (len(x_train_2s), 28, 28, 1))
+x_test_2s = np.reshape(x_test_2s, (len(x_test_2s), 28, 28, 1))
+
+noise_factor = 0.3
+x_train_noisy = x_train_2s + noise_factor * np.random.normal(size=x_train_2s.shape)
+x_test_noisy = x_test_2s + noise_factor * np.random.normal(size=x_test_2s.shape)
+x_train_noisy = np.clip(x_train_noisy, 0., 1.)
+x_test_noisy = np.clip(x_test_noisy, 0., 1.)
+
+input_img = layers.Input(shape=(28, 28, 1))
+x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(input_img)
+x = layers.MaxPooling2D((2, 2), padding='same')(x)
+x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+encoded = layers.MaxPooling2D((2, 2), padding='same')(x)
+
+x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(encoded)
+x = layers.UpSampling2D((2, 2))(x)
+x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+x = layers.UpSampling2D((2, 2))(x)
+decoded = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+
+autoencoder = models.Model(input_img, decoded)
+autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+autoencoder.fit(x_train_noisy, x_train_2s, epochs=50, batch_size=128)
+
+decoded_imgs = autoencoder.predict(x_test_noisy)
+```

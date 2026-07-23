@@ -1,0 +1,101 @@
+العنوان: كود U-Net لتجزئة صور الأورام (Image Segmentation)
+
+الشرح بالعربي:
+هذا الكود يبني معمارية U-Net الشهيرة لمهمة التجزئة الدلالية (Semantic Segmentation)، وتحديدًا لتجزئة صور الأورام إلى منطقة الورم (mask) مقابل الخلفية، باستخدام صور من مجلدين: أورام حميدة (benign) وأورام خبيثة (malignant).
+
+خطوات الكود:
+- المرور على كل الملفات داخل المجلدين، وقراءة كل صورة وتحويلها إلى الحجم 128x128 وإلى تدرج رمادي (Grayscale) وتطبيع قيمها بين 0 و1.
+- التفرقة بين الصورة الأصلية وصورة القناع (mask) بناءً على وجود كلمة "mask" في اسم الملف؛ وفي حال وجود أكثر من قناع لنفس الصورة، يتم دمجهما معًا ثم تحويل الناتج إلى قيم ثنائية (0 أو 1).
+- تحويل القوائم إلى مصفوفات NumPy وإضافة بُعد القناة، ثم تقسيم البيانات إلى تدريب وتحقق.
+- بناء معمارية U-Net الكاملة:
+  - جزء الترميز (Encoder): أربع كتل، كل كتلة تتكون من طبقتي Conv2D متتاليتين تليهما MaxPooling2D، مع زيادة عدد المرشحات تدريجيًا (64، 128، 256، 512).
+  - نقطة الاختناق (Bottleneck): طبقتا Conv2D بـ 1024 مرشحًا.
+  - جزء فك الترميز (Decoder): أربع كتل، كل كتلة تستخدم Conv2DTranspose لزيادة الدقة المكانية، ثم دمج (concatenate) المخرجات مع الطبقة المناظرة لها من جزء الترميز (Skip Connections)، ثم طبقتي Conv2D.
+  - الطبقة الأخيرة: Conv2D بمرشح واحد وحجم نواة 1x1 ودالة تفعيل sigmoid لإنتاج قناع التجزئة النهائي.
+- تجميع النموذج بدالة خسارة binary_crossentropy وتدريبه لمدة 40 حقبة.
+- حساب مقياس IoU (Intersection over Union) باستخدام jaccard_score لتقييم جودة التجزئة.
+- عرض مقارنة بصرية بين الصورة الأصلية، القناع الحقيقي، والقناع المتوقع لعينة واحدة من بيانات التحقق.
+
+هذا مثال شامل وقوي على استخدام معمارية U-Net في التطبيقات الطبية لتجزئة الصور، وهي من أكثر المعماريات استخدامًا في هذا المجال.
+
+الكود الكامل:
+```python
+import matplotlib.pyplot as plt
+import cv2
+import numpy as np
+from glob import glob
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Conv2DTranspose, concatenate
+from tensorflow.keras.models import Model
+
+folder_paths = ["C:/AI/Cancer/malignant", "C:/AI/Cancer/benign"]
+size = 128
+images, masks = [], []
+found_mask = False
+
+for folder_path in folder_paths:
+    for file_path in sorted(glob(folder_path + "/*")):
+        img = cv2.imread(file_path)
+        img = cv2.resize(img, (size, size))
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img = img / 255.0
+        if "mask" in file_path:
+            if found_mask:
+                masks[-1] += img
+                masks[-1] = np.where(masks[-1] > 0.5, 1.0, 0.0)
+            else:
+                masks.append(img)
+                found_mask = True
+        else:
+            images.append(img)
+            found_mask = False
+
+X = np.expand_dims(np.array(images), -1)
+y = np.expand_dims(np.array(masks), -1)
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.1)
+
+input_layer = Input(shape=(size, size, 1))
+conv1 = Conv2D(64, (3,3), activation="relu", padding="same")(input_layer)
+conv1 = Conv2D(64, (3,3), activation="relu", padding="same")(conv1)
+pool1 = MaxPooling2D((2,2))(conv1)
+
+conv2 = Conv2D(128, (3,3), activation="relu", padding="same")(pool1)
+conv2 = Conv2D(128, (3,3), activation="relu", padding="same")(conv2)
+pool2 = MaxPooling2D((2,2))(conv2)
+
+conv3 = Conv2D(256, (3,3), activation="relu", padding="same")(pool2)
+conv3 = Conv2D(256, (3,3), activation="relu", padding="same")(conv3)
+pool3 = MaxPooling2D((2,2))(conv3)
+
+conv4 = Conv2D(512, (3,3), activation="relu", padding="same")(pool3)
+conv4 = Conv2D(512, (3,3), activation="relu", padding="same")(conv4)
+pool4 = MaxPooling2D((2,2))(conv4)
+
+bottleneck = Conv2D(1024, (3,3), activation="relu", padding="same")(pool4)
+bottleneck = Conv2D(1024, (3,3), activation="relu", padding="same")(bottleneck)
+
+upconv1 = Conv2DTranspose(512, (2,2), strides=2, padding="same")(bottleneck)
+concat1 = concatenate([upconv1, conv4])
+conv5 = Conv2D(512, (3,3), activation="relu", padding="same")(concat1)
+conv5 = Conv2D(512, (3,3), activation="relu", padding="same")(conv5)
+
+upconv2 = Conv2DTranspose(256, (2,2), strides=2, padding="same")(conv5)
+concat2 = concatenate([upconv2, conv3])
+conv6 = Conv2D(256, (3,3), activation="relu", padding="same")(concat2)
+conv6 = Conv2D(256, (3,3), activation="relu", padding="same")(conv6)
+
+upconv3 = Conv2DTranspose(128, (2,2), strides=2, padding="same")(conv6)
+concat3 = concatenate([upconv3, conv2])
+conv7 = Conv2D(128, (3,3), activation="relu", padding="same")(concat3)
+conv7 = Conv2D(128, (3,3), activation="relu", padding="same")(conv7)
+
+upconv4 = Conv2DTranspose(64, (2,2), strides=2, padding="same")(conv7)
+concat4 = concatenate([upconv4, conv1])
+conv8 = Conv2D(64, (3,3), activation="relu", padding="same")(concat4)
+conv8 = Conv2D(64, (3,3), activation="relu", padding="same")(conv8)
+
+output_layer = Conv2D(1, (1,1), activation="sigmoid", padding="same")(conv8)
+model = Model(inputs=input_layer, outputs=output_layer)
+model.compile(loss="binary_crossentropy", optimizer="Adam", metrics=["accuracy"])
+model.fit(X_train, y_train, epochs=40, validation_data=(X_val, y_val), verbose=1)
+```
