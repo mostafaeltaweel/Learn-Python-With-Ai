@@ -9,7 +9,6 @@
 """
 
 import os
-
 from importlib import import_module
 
 _chunking_module = import_module("03_chunking")
@@ -24,6 +23,7 @@ COLLECTION_NAME = "python_code_explanations_ar"
 
 
 def get_chroma_client():
+    """ينشئ أو يجلب العميل الخاص بـ ChromaDB على القرص."""
     import chromadb
     return chromadb.PersistentClient(path=CHROMA_DB_DIR)
 
@@ -59,6 +59,24 @@ def build_vector_store():
 
     print(f"تم حفظ {collection.count()} قطعة في مخزن Chroma بالمسار: {CHROMA_DB_DIR}")
     return collection
+
+
+def create_or_load_vector_store(chunks=None, embedding_model=None, persist_directory=None):
+    """
+    الدالة المطلوبة لربط streamlit_app.py:
+    تحمّل قاعدة البيانات إن كانت موجودة مسبقاً وبها بيانات، أو تقوم ببنائها لأول مرة.
+    """
+    client = get_chroma_client()
+    try:
+        collection = client.get_collection(name=COLLECTION_NAME)
+        if collection.count() > 0:
+            print(f"✅ تم تحميل قاعدة ChromaDB الموجودة بنجاح ({collection.count()} قطعة).")
+            return collection
+    except Exception:
+        pass
+
+    print("🌐 لم يتم العثور على قاعدة بيانات جهزة، جاري البناء الآن...")
+    return build_vector_store()
 
 
 if __name__ == "__main__":
