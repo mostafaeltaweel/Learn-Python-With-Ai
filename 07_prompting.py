@@ -1,25 +1,20 @@
 """
-07_prompting.py
------------------
-المرحلة السابعة: بناء الـ Prompt واستدعاء نموذج اللغة الكبير (LLM) عبر Groq API.
-
-المميزات:
-- أمان كامل لمفاتيح الـ API (قراءة تلقائية من .env أو Streamlit Secrets).
-- يحتوي على جميع الدوال التي تبحث عنها الواجهة (get_groq_llm, build_rag_chain, answer_question).
-- حماية ضد مشاكل اختلاف إصدارات المكتبات (LangChain & Groq SDK).
+07_prompting.py (النسخة المتقدمة المحسنة)
+--------------------------------------
+المرحلة السابعة: بناء Prompt احترافي واستدلال عالي الدقة عبر Groq API.
 """
 
 import os
 from importlib import import_module
 
-# 1. تحميل متغيرات البيئة من ملف .env المحلي إن وجد
+# 1. تحميل متغيرات البيئة
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
-# 2. استيراد وحدة الاسترجاع ديناميكيًا لتفادي مشاكل الأسماء المرقّمة
+# 2. استيراد وحدة الاسترجاع
 try:
     _retrieve_module = import_module("06_retrieve_context")
     retrieve_context = getattr(_retrieve_module, "retrieve_context", None)
@@ -29,42 +24,44 @@ except Exception:
     format_context = None
 
 # ------------------------------------------------------------------
-# 3. المتغيرات العامة الأساسية (Global Variables)
+# المتغيرات العامة الأساسية
 # ------------------------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-SYSTEM_PROMPT = """أنت مساعد ذكي متخصص في شرح أكواد Python الخاصة بالتعلم الآلي والتعلم العميق وتحليل البيانات.
-أجب على أسئلة المستخدم بالعربية فقط، وبشكل منظم وواضح، بالاعتماد حصريًا على السياق (Context) المُرفق أدناه.
-إذا لم يحتوِ السياق على إجابة كافية للسؤال، صرّح بوضوح أن المعلومة غير متوفرة في المصادر المتاحة.
-في نهاية إجابتك، اذكر دائمًا قائمة بعنوان "المصادر:" تحتوي على أسماء وعناوين المصادر
-التي اعتمدت عليها في إجابتك (من بين المصادر المرفقة في السياق فقط)."""
+# توجيهات صارمة ومحددة للنموذج لرفع جودة الإجابة
+SYSTEM_PROMPT = """أنت خبير ذكاء اصطناعي وتعلّم عميق، ودورك شرح وتفسير أكواد Python المرفقة في السياق فقط.
+
+قواعد الاستجابة الصارمة:
+1. الإجابة يجب أن تكون باللغة العربية، واضحة، ومقسمة إلى نقاط أو خطوات منظمة.
+2. اعتمد حصريًا على السياق (Context) المرفق لك في السؤال. لا تقم بافتراض أو اختراع أي معلومات خارجية.
+3. إذا لم يغطّ السياق سؤال المستخدم بشكل كامل، اذكر بوضوح: "المعلومة المطلوبة غير متوفرة بشكل كامل في المصادر المتاحة."
+4. قم بشرح الأكواد والخطوات بالتفصيل بناءً على ما هو موجود في المصدر.
+5. في نهاية الإجابة، قم بإدراج قسم خاص بعنوان "المصادر المعتمدة:" واذكر فيه ألقاب وأسماء الملفات التي استندت إليها فقط."""
 
 
-# ------------------------------------------------------------------
-# 4. بناء الـ Prompt واستدعاء Groq
-# ------------------------------------------------------------------
 def build_prompt(question: str, context: str) -> str:
-    """يبني النص النهائي الموجه للنموذج بالجمع بين السياق والسؤال."""
-    return f"""السياق المسترجع من قاعدة المعرفة:
+    """يبني نص الـ Prompt الموجه للنموذج بشكل معالج."""
+    if not context.strip():
+        context = "لا يوجد سياق مسترجع متاح."
+
+    return f"""### السياق المسترجع من قاعدة المعرفة:
 {context}
 
-سؤال المستخدم:
+---
+### سؤال المستخدم:
 {question}
 
-اكتب إجابة واضحة ومنظمة بالعربية بناءً على السياق أعلاه فقط، ثم اذكر المصادر المستخدمة في النهاية."""
+اكتب إجابة دقيقة ومفصلة بناءً على السياق أعلاه فقط:"""
 
 
-def call_groq(prompt: str, api_key: str = None, model: str = None) -> str:
-    """يستدعي نموذج Groq عبر SDK الرسمي الخاص بمكتبة groq بشكل مباشر."""
+def call_groq(prompt: str, api_key: str = None, model: str = None, temperature: float = 0.1) -> str:
+    """استدعاء مباشر ومُحسّن لـ Groq API مع ضبط المعلمات لتفادي الهلوسة."""
     active_api_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     active_model = model or GROQ_MODEL or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     if not active_api_key:
-        raise ValueError(
-            "مفتاح GROQ_API_KEY غير موجود. "
-            "أضِفه في ملف .env محليًا أو في Streamlit Secrets عند النشر."
-        )
+        raise ValueError("مفتاح GROQ_API_KEY غير متوفر. يرجى إضافته في البيئة أو الملفات.")
 
     try:
         from groq import Groq
@@ -76,28 +73,20 @@ def call_groq(prompt: str, api_key: str = None, model: str = None) -> str:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=temperature,  # منخفضة للالتزام بالحقائق
             max_tokens=2048,
+            top_p=0.9,
         )
         return response.choices[0].message.content
     except Exception as e:
-        raise RuntimeError(f"حدث خطأ أثناء الاتصال بـ Groq API: {str(e)}")
+        raise RuntimeError(f"خطأ في الاتصال بـ Groq API: {str(e)}")
 
 
-def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float = 0.2):
-    """
-    تنشئ وترجع كائن النموذج لاستخدامه في سلاسل RAG وواجهة Streamlit.
-    """
+def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float = 0.1):
+    """إرجاع كائن استدعاء متوافق مع سلاسل LangChain وواجهة Streamlit."""
     active_api_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     active_model = model_name or GROQ_MODEL or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-    if not active_api_key:
-        raise ValueError(
-            "مفتاح GROQ_API_KEY غير موجود. "
-            "أضِفه في ملف .env محليًا أو في Streamlit Secrets عند النشر."
-        )
-
-    # محاولة استخدام ChatGroq من LangChain أولاً
     try:
         from langchain_groq import ChatGroq
         return ChatGroq(
@@ -106,7 +95,6 @@ def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float
             temperature=temperature,
         )
     except Exception:
-        # كائن احتياطي مستقر يعتمد على call_groq مباشرة لتفادي مشاكل الإصدارات والمعاملات
         class GroqLLMWrapper:
             def __init__(self, key, model, temp):
                 self.key = key
@@ -115,7 +103,7 @@ def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float
 
             def invoke(self, prompt):
                 p_text = prompt.to_string() if hasattr(prompt, "to_string") else str(prompt)
-                res = call_groq(p_text, api_key=self.key, model=self.model)
+                res = call_groq(p_text, api_key=self.key, model=self.model, temperature=self.temp)
                 class Response:
                     content = res
                 return Response()
@@ -126,14 +114,8 @@ def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float
         return GroqLLMWrapper(active_api_key, active_model, temperature)
 
 
-# ------------------------------------------------------------------
-# 5. بناء السلسلة الكاملة (RAG Chain)
-# ------------------------------------------------------------------
 def build_rag_chain(retriever, llm):
-    """
-    تبني وتسترجع سلسلة RAG متكاملة تقوم بـ (الاسترجاع ➔ بناء السياق ➔ التوليد).
-    تتطابق تماماً مع ما تنتظره واجهة streamlit_app.py.
-    """
+    """بناء RAG Chain متكامل ومستقر للواجهة."""
     class RAGChain:
         def __init__(self, retriever_obj, llm_obj):
             self.retriever = retriever_obj
@@ -142,7 +124,7 @@ def build_rag_chain(retriever, llm):
         def invoke(self, inputs: dict) -> dict:
             question = inputs.get("input", "") if isinstance(inputs, dict) else str(inputs)
 
-            # 1. مرحلة الاسترجاع (Retrieval)
+            # 1. الاسترجاع
             if hasattr(self.retriever, "invoke"):
                 docs = self.retriever.invoke(question)
             elif hasattr(self.retriever, "get_relevant_documents"):
@@ -154,17 +136,18 @@ def build_rag_chain(retriever, llm):
             else:
                 docs = []
 
-            # 2. مرحلة تنسيق السياق (Formatting)
+            # 2. التنسيق
             if callable(format_context):
                 context_str = format_context(docs)
             else:
                 parts = []
                 for i, doc in enumerate(docs, 1):
                     text = getattr(doc, "page_content", getattr(doc, "text", str(doc)))
-                    parts.append(f"[مصدر {i}]\n{text}")
+                    source = doc.metadata.get("source", f"مصدر {i}") if hasattr(doc, "metadata") else f"مصدر {i}"
+                    parts.append(f"[{source}]\n{text}")
                 context_str = "\n\n---\n\n".join(parts)
 
-            # 3. بناء الـ Prompt والتوليد عبر LLM
+            # 3. التوليد
             full_prompt = build_prompt(question, context_str)
             
             if hasattr(self.llm, "invoke"):
@@ -179,31 +162,3 @@ def build_rag_chain(retriever, llm):
             }
 
     return RAGChain(retriever, llm)
-
-
-def answer_question(question: str, top_k: int = 4, api_key: str = None, model: str = None):
-    """
-    الدالة الشاملة: تسترجع المستندات، تبني الـ prompt، وتستدعي Groq مباشرة.
-    """
-    retrieved_chunks = retrieve_context(question, top_k=top_k) if callable(retrieve_context) else []
-    context = format_context(retrieved_chunks) if callable(format_context) else ""
-    prompt = build_prompt(question, context)
-    answer = call_groq(prompt, api_key=api_key, model=model)
-    return answer, retrieved_chunks
-
-
-# ------------------------------------------------------------------
-# 6. تجربة الملف منفرداً (Standalone Test)
-# ------------------------------------------------------------------
-if __name__ == "__main__":
-    q = "اشرح لي فكرة كود الـ Autoencoder وإزالة التشويش من الصور"
-    try:
-        answer, sources = answer_question(q)
-        print("الإجابة:\n", answer)
-        print("\nالمصادر المسترجعة:")
-        for s in sources:
-            title = getattr(s, "title", "مصدر")
-            source = getattr(s, "source", "")
-            print(f"- {title} ({source})")
-    except Exception as e:
-        print("خطأ أثناء التجربة:", e)
