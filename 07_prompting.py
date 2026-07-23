@@ -45,8 +45,7 @@ def build_prompt(question: str, context: str) -> str:
 
 def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float = 0.2):
     """
-    الدالة المطلوبة لـ streamlit_app.py:
-    تنشئ وترجع كائن ChatGroq لاستخدامه في سلاسل RAG والواجهة.
+    تنشئ وترجع كائن ChatGroq أو كائن متوافق لاستخدامه في سلاسل RAG والواجهة.
     """
     active_api_key = api_key or GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     active_model = model_name or GROQ_MODEL or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -65,7 +64,6 @@ def get_groq_llm(api_key: str = None, model_name: str = None, temperature: float
             temperature=temperature,
         )
     except ImportError:
-        # كائن بديلي في حال استدعائه بدون تثبيت مكتبة langchain_groq
         class GroqLLMWrapper:
             def __init__(self, key, model, temp):
                 self.key = key
@@ -109,6 +107,58 @@ def call_groq(prompt: str, api_key: str = None, model: str = None) -> str:
         max_tokens=2048,
     )
     return response.choices[0].message.content
+
+
+def build_rag_chain(retriever, llm):
+    """
+    الدالة المطلوبة لـ streamlit_app.py:
+    تبني وتسترجع سلسلة RAG متكاملة تقوم بـ (الاسترجاع ➔ بناء السياق ➔ التوليد).
+    """
+    class RAGChain:
+        def __init__(self, retriever_obj, llm_obj):
+            self.retriever = retriever_obj
+            self.llm = llm_obj
+
+        def invoke(self, inputs: dict) -> dict:
+            question = inputs.get("input", "") if isinstance(inputs, dict) else str(inputs)
+
+            # 1. الاسترجاع
+            if hasattr(self.retriever, "invoke"):
+                docs = self.retriever.invoke(question)
+            elif hasattr(self.retriever, "get_relevant_documents"):
+                docs = self.retriever.get_relevant_documents(question)
+            elif callable(self.retriever):
+                docs = self.retriever(question)
+            elif callable(retrieve_context):
+                docs = retrieve_context(question)
+            else:
+                docs = []
+
+            # 2. تنسيق السياق
+            if callable(format_context):
+                context_str = format_context(docs)
+            else:
+                parts = []
+                for i, doc in enumerate(docs, 1):
+                    text = getattr(doc, "page_content", getattr(doc, "text", str(doc)))
+                    parts.append(f"[مصدر {i}]\n{text}")
+                context_str = "\n\n---\n\n".join(parts)
+
+            # 3. بناء الـ Prompt والتوليد عبر LLM
+            full_prompt = build_prompt(question, context_str)
+            
+            if hasattr(self.llm, "invoke"):
+                response = self.llm.invoke(full_prompt)
+                answer = getattr(response, "content", str(response))
+            else:
+                answer = call_groq(full_prompt)
+
+            return {
+                "answer": answer,
+                "context": docs
+            }
+
+    return RAGChain(retriever, llm)
 
 
 def answer_question(question: str, top_k: int = 4, api_key: str = None, model: str = None):
